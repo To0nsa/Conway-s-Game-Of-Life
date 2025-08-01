@@ -1,0 +1,11 @@
+[build]
+rustflags = [
+  "-C", "opt-level=3",
+  "-C", "lto=yes",
+  "-C", "codegen-units=1",
+  "-C", "target-cpu=native",
+]
+
+[profile.release]
+strip = true        # optional: remove debug symbols
+panic = "abort"     # optional: smaller binary if you don't need unwinding

@@ -1,100 +1,60 @@
-use std::{thread::sleep, time::Duration};
+// src/main.rs
 
-// grid dimensions
-const WIDTH: usize = 32;
-const HEIGHT: usize = 32;
+mod gol_zero;
+mod gol_one;
+mod gol_two;
+mod gol_three;
+mod utils;
 
-// rendering
-const ALIVE: char = 'X'; //'█';
-const DEAD:  char = ' ';
-const CLEAR_SCREEN_SEQUENCE: &str = "\x1B[2J\x1B[1;1H";
+use std::env;
+use utils::{parse_arg, load_grid, benchmark, print_grid, flatten_grid, print_flat_grid};
+use utils::{render_grid};
 
-// timing
-const TICK_DURATION_MS: u64 = 200;
-const TICK_DURATION: Duration = Duration::from_millis(TICK_DURATION_MS);
-
-// initial pattern: a “glider”
-const GLIDER: &[(usize, usize)] = &[
-    (1, 2),
-    (2, 3),
-    (3, 1),
-    (3, 2),
-    (3, 3),
-];
-
-/// Compute the next generation from the current grid.
-fn compute_next_generation(
-    current_grid: &[[bool; WIDTH]; HEIGHT]
-) -> [[bool; WIDTH]; HEIGHT] {
-    let mut next_grid: [[bool; 32]; 32] = [[false; WIDTH]; HEIGHT];
-
-    for row in 0..HEIGHT {
-        for col in 0..WIDTH {
-            // count live neighbors
-            let mut live_neighbor_count: i32 = 0;
-            for y_offset in [-1isize, 0, 1] {
-                for x_offset in [-1isize, 0, 1] {
-                    if y_offset == 0 && x_offset == 0 {
-                        continue; // skip the cell itself
-                    }
-                    let neighbor_row: isize = row as isize + y_offset;
-                    let neighbor_col: isize = col as isize + x_offset;
-
-                    if neighbor_row >= 0
-                        && neighbor_row < HEIGHT as isize
-                        && neighbor_col >= 0
-                        && neighbor_col < WIDTH as isize
-                    {
-                        if current_grid[neighbor_row as usize][neighbor_col as usize] {
-                            live_neighbor_count += 1;
-                        }
-                    }
-                }
-            }
-
-            // apply Conway's rules
-            let is_currently_alive: bool = current_grid[row][col];
-            next_grid[row][col] = match (is_currently_alive, live_neighbor_count) {
-                (true, 2) | (true, 3)  => true,   // survival
-                (false, 3)             => true,   // reproduction
-                _                      => false,  // death or remains empty
-            };
-        }
-    }
-
-    next_grid
-}
-
-/// Clear the terminal screen (ANSI escape).
-fn clear_screen() {
-    print!("{}", CLEAR_SCREEN_SEQUENCE);
-}
+use crate::gol_zero::gol_zero;
+use crate::gol_one::gol_one;
+use crate::gol_two::gol_two;
+use crate::gol_three::gol_three;
 
 fn main() {
-    // create an empty grid
-    let mut grid: [[bool; 32]; 32] = [[false; WIDTH]; HEIGHT];
-
-    // seed the glider pattern
-    for &(row, col) in GLIDER {
-        grid[row][col] = true;
+    let args: Vec<String> = env::args().collect();
+    if args.len() != 3 {
+        eprintln!("Usage: {} <initial_state_file> <iterations>", args[0]);
+        std::process::exit(1);
     }
 
-    // simulation loop
-    loop {
-        clear_screen();
+    let file_path: String  = parse_arg(&args, 1, "initial_state_file");
+    let iterations: usize  = parse_arg(&args, 2, "iterations");
 
-        // render current grid
-        for row in &grid {
-            for &cell in row {
-                print!("{}", if cell { ALIVE } else { DEAD });
-            }
-            println!();
-        }
+    // 1) Load the 2D grid
+    let initial_grid = load_grid(&file_path);
 
-        // advance to next generation
-        grid = compute_next_generation(&grid);
+    // 2) Run & display the gol_zero and gol_one benchmarks
+    render_grid(&initial_grid, iterations, gol_one::compute_next_generation);
+    print_grid(&initial_grid);
 
-        // pause between ticks
-        sleep(TICK_DURATION);
-    }
+    let (final_state, elapsed) = benchmark(&initial_grid, iterations, gol_zero);
+    println!("Simulation with gol_zero of {} generations took {:?}", iterations, elapsed);
+    print_grid(&final_state);
+
+    let (final_state, elapsed) = benchmark(&initial_grid, iterations, gol_one);
+    println!("Simulation with gol_one of {} generations took {:?}", iterations, elapsed);
+    print_grid(&final_state);
+
+    // 3) Prepare for flat‐buffer gol_two
+    let width     = initial_grid[0].len();
+    let flat_grid = flatten_grid(&initial_grid);
+
+    // 4) Benchmark the new flat version by wrapping gol_two in a closure
+    let (final_flat, elapsed_flat) = benchmark(&flat_grid, iterations, |buf, iters| {
+        gol_two(buf, width, iters)
+    });
+    println!("Simulation with gol_two (flat) of {} generations took {:?}", iterations, elapsed_flat);
+    print_flat_grid(&final_flat, width);
+
+    let (final_flat, elapsed_flat) = benchmark(&flat_grid, iterations, |buf, iters| {
+        gol_three(buf, width, iters)
+    });
+    println!("Simulation with gol_three (flat) of {} generations took {:?}", iterations, elapsed_flat);
+    print_flat_grid(&final_flat, width);
+
 }
