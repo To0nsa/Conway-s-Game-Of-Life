@@ -1,0 +1,19 @@
+# rustfmt.toml
+
+# Maximum width of each line
+max_width = 80
+
+# Use tabs instead of spaces
+hard_tabs = false
+
+# How many spaces to indent
+tab_spaces = 4
+
+# Where to put braces: “AlwaysNextLine” for opening braces on their own line
+brace_style = "AlwaysNextLine"
+
+# Control import reordering
+reorder_imports = true
+
+# Enforce single-line imports when possible
+imports_granularity = "Crate"

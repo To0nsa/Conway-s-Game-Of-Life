@@ -1,60 +1,73 @@
 // src/main.rs
 
-mod gol_zero;
+use std::env;
+use utils::{
+    benchmark::benchmark,
+    conversion::{flatten_grid, to_bitboards},
+    initialize_grid::{load_grid, parse_arg},
+};
+
+mod gol_five;
+mod gol_four;
 mod gol_one;
-mod gol_two;
 mod gol_three;
+mod gol_three_infinite;
+mod gol_two;
+mod gol_two_infinite;
+mod gol_zero;
 mod utils;
 
-use std::env;
-use utils::{parse_arg, load_grid, benchmark, print_grid, flatten_grid, print_flat_grid};
-use utils::{render_grid};
-
-use crate::gol_zero::gol_zero;
-use crate::gol_one::gol_one;
-use crate::gol_two::gol_two;
-use crate::gol_three::gol_three;
+use crate::{
+    gol_five::gol_five,
+    gol_four::gol_four,
+    gol_one::gol_one,
+    gol_three::gol_three,
+    gol_three_infinite::gol_three_infinite,
+    gol_two::gol_two,
+    gol_two_infinite::gol_two_infinite,
+    gol_zero::gol_zero,
+};
 
 fn main() {
+    // Parse arguments
     let args: Vec<String> = env::args().collect();
     if args.len() != 3 {
         eprintln!("Usage: {} <initial_state_file> <iterations>", args[0]);
         std::process::exit(1);
     }
 
-    let file_path: String  = parse_arg(&args, 1, "initial_state_file");
-    let iterations: usize  = parse_arg(&args, 2, "iterations");
+    let file_path: String = parse_arg(&args, 1, "initial_state_file");
+    let iterations: usize = parse_arg(&args, 2, "iterations");
 
-    // 1) Load the 2D grid
+    // Load & preprocess
     let initial_grid = load_grid(&file_path);
-
-    // 2) Run & display the gol_zero and gol_one benchmarks
-    render_grid(&initial_grid, iterations, gol_one::compute_next_generation);
-    print_grid(&initial_grid);
-
-    let (final_state, elapsed) = benchmark(&initial_grid, iterations, gol_zero);
-    println!("Simulation with gol_zero of {} generations took {:?}", iterations, elapsed);
-    print_grid(&final_state);
-
-    let (final_state, elapsed) = benchmark(&initial_grid, iterations, gol_one);
-    println!("Simulation with gol_one of {} generations took {:?}", iterations, elapsed);
-    print_grid(&final_state);
-
-    // 3) Prepare for flat‐buffer gol_two
-    let width     = initial_grid[0].len();
+    let width = initial_grid[0].len();
     let flat_grid = flatten_grid(&initial_grid);
+    let (bitboards, _bb_width) = to_bitboards(&initial_grid);
 
-    // 4) Benchmark the new flat version by wrapping gol_two in a closure
-    let (final_flat, elapsed_flat) = benchmark(&flat_grid, iterations, |buf, iters| {
-        gol_two(buf, width, iters)
-    });
-    println!("Simulation with gol_two (flat) of {} generations took {:?}", iterations, elapsed_flat);
-    print_flat_grid(&final_flat, width);
+    // Benchmark simulations
+    let (_, elapsed) = benchmark(&initial_grid, |grid| gol_zero(grid, iterations));
+    println!("Simulation with gol_zero took {:?}", elapsed);
 
-    let (final_flat, elapsed_flat) = benchmark(&flat_grid, iterations, |buf, iters| {
-        gol_three(buf, width, iters)
-    });
-    println!("Simulation with gol_three (flat) of {} generations took {:?}", iterations, elapsed_flat);
-    print_flat_grid(&final_flat, width);
+    let (_, elapsed) = benchmark(&initial_grid, |grid| gol_one(grid, iterations));
+    println!("Simulation with gol_one took {:?}", elapsed);
 
+    let (_, elapsed) = benchmark(&flat_grid, |flat| gol_two(flat, width, iterations));
+    println!("Simulation with gol_two (flat) took {:?}", elapsed);
+
+    let ((_, _), elapsed) = benchmark(&(flat_grid, width), |(flat, w)| gol_two_infinite(flat, w, iterations));
+    println!("Simulation with gol_two_infinite (flat) took {:?}", elapsed);
+
+    let flat_grid = flatten_grid(&initial_grid);
+    let (_, elapsed) = benchmark(&flat_grid, |flat| gol_three(flat, width, iterations));
+    println!("Simulation with gol_three (flat) took {:?}", elapsed);
+
+    let ((_, _), elapsed) = benchmark(&(flat_grid, width), |(flat, w)| gol_three_infinite(flat, w, iterations));
+    println!("Simulation with gol_three_infinite (flat) took {:?}", elapsed);
+
+    let (_, elapsed) = benchmark(&(bitboards.clone(), width), |(bb, w)| gol_four(bb, w, iterations));
+    println!("Simulation with gol_four (bitboard) took {:?}", elapsed);
+
+    let (_, elapsed) = benchmark(&(bitboards, width), |(bb, w)| gol_five(bb, w, iterations));
+    println!("Simulation with gol_five (bitboard) took {:?}", elapsed);
 }
